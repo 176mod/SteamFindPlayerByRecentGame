@@ -1,11 +1,18 @@
 import sys
 import logging
-# Configure the logging to write to a file
+import time
+
+# Generate a unique filename based on the current time
+filename = f"app_{time.strftime('%Y-%m-%d_%H-%M-%S')}.log"
+
+# Configure the logging to write to a new file each time
 logging.basicConfig(
-    filename='app.log',  # Specify the log file name
-    level=logging.INFO,   # Set the logging level
+    filename=filename,  # Specify the log file name
+    level=logging.INFO,  # Set the logging level
     format='%(asctime)s - %(levelname)s - %(message)s',  # Set the format of log messages
+    filemode='w'  # Create a new file each time (overwrite existing)
 )
+
 import requests
 from bs4 import BeautifulSoup
 from selenium import webdriver
@@ -16,7 +23,6 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 
-import time
 """depracted... tensorflow-gpu use not decided yet"""
 # import tensorflow as tf
 # print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
@@ -42,31 +48,52 @@ import time
 # # Base URL for searching user profiles on Steam
 # base_url = 'https://steamcommunity.com/search/users/'
 
+driver = None
+
+def init_webdriver():
+    global driver
+    if driver is None:  # Check if driver is already initialized
+        options = webdriver.ChromeOptions()
+        driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=options)
+
+def close_webdriver():
+    global driver
+    if driver is not None:
+        driver.quit()
+        driver = None
+
 def get_page_instance_with_url_selenium(url, cookies):
+    init_webdriver()  # Ensure the WebDriver is initialized
+    
     if not cookies:
         raise ValueError("Cookies must be provided for authentication.")
-
-    options = webdriver.ChromeOptions()
-    driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=options)
-
     driver.get(url)
-
     # Add cookies to the WebDriver
     for key, value in cookies.items():
         driver.add_cookie({'name': key, 'value': value})
-
-    driver.refresh()  # Refresh the page to include cookies
-
+    # Load cookie
+    driver.refresh()
     # Wait for a specific element to load (change 'element_selector' to an actual selector)
     try:
+        # Wait for the document to be fully loaded
         WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, 'element_selector'))
+            lambda d: d.execute_script('return document.readyState') == 'complete'
         )
+        
+        # Optional: wait for a specific element that indicates content is fully loaded
+        # WebDriverWait(driver, 20).until(
+        #     EC.presence_of_element_located((By.CSS_SELECTOR, 'specific_element_selector'))
+        # )
+
+        # If needed, add a slight delay
+        time.sleep(2)  # Adjust the duration as necessary
+
+        # Now you can get the page source
+        soup = BeautifulSoup(driver.page_source, 'html.parser')
     except TimeoutException:
         print("Loading took too much time!")
 
     soup = BeautifulSoup(driver.page_source, 'html.parser')  # Parse the page source
-    driver.quit()
     return soup
 
 """depracated due to complexity reasons"""
@@ -143,8 +170,8 @@ def profile_links_on_page(soup_page_instance):
     
     for href_obj in all_href_objs:
         profile_links_on_page.append(href_obj['href'])
+        logging.info(f"profile url found: {href_obj['href']}")
         print(f"profile url found: {href_obj['href']}")
-        
     return profile_links_on_page
 
 def soup_page_instance_containing_keyword(soup_page_instance, keyword) -> bool:
@@ -183,23 +210,23 @@ def main():
     keyword = "Helldivers"
     pageNum = 1
     while True:
-        profile_urls = profile_links_on_page_url(url_of_page_num(base_url,pageNum,player_name),cookies)
-        profile_recentgamepage_urls = [get_recent_game_page_url(profile_url) for profile_url in profile_urls]
+        profile_urls = profile_links_on_page_url(url_of_page_num(base_url,pageNum,player_name),cookies) # find the urls of profiles
+        profile_recentgamepage_urls = [get_recent_game_page_url(profile_url) for profile_url in profile_urls] # concatenate the recent game page url
         recentgamepage_instances = {
                                     profile_recentgamepage_url: 
-                                    get_page_instance_with_url_selenium(profile_recentgamepage_url)
+                                    get_page_instance_with_url_selenium(profile_recentgamepage_url,cookies)
                                     for profile_recentgamepage_url in profile_recentgamepage_urls
-                                    }
+                                    } # dictionary of recentgame page instances, each url correspond to a page
         
-        recentgamepage_containing_keyword = []
+        recentgamepage_containing_keyword = [] # pages containing target keyword
 
         for url, recentgamepage_instance in recentgamepage_instances.items():
             if soup_page_instance_containing_keyword(recentgamepage_instance, keyword):
                 recentgamepage_containing_keyword.append(url)
-
-        print(f"Eligible pages found:{recentgamepage_containing_keyword}")
-        
+                print(f'Eligible pages found:{recentgamepage_containing_keyword}')
+                logging.info(f'Eligible pages found:{recentgamepage_containing_keyword}')
         pageNum += 1
+        
 
 if __name__ == "__main__":
     main()  # Call the main function
