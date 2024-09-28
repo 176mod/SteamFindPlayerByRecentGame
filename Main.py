@@ -11,6 +11,11 @@ from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
 from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
+
 import time
 """depracted... tensorflow-gpu use not decided yet"""
 # import tensorflow as tf
@@ -42,7 +47,6 @@ def get_page_instance_with_url_selenium(url, cookies):
         raise ValueError("Cookies must be provided for authentication.")
 
     options = webdriver.ChromeOptions()
-    # options.add_argument('--headless')  # Optional: run in headless mode
     driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=options)
 
     driver.get(url)
@@ -52,7 +56,15 @@ def get_page_instance_with_url_selenium(url, cookies):
         driver.add_cookie({'name': key, 'value': value})
 
     driver.refresh()  # Refresh the page to include cookies
-    time.sleep(100)  # Wait for the page to load fully
+
+    # Wait for a specific element to load (change 'element_selector' to an actual selector)
+    try:
+        WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, 'element_selector'))
+        )
+    except TimeoutException:
+        print("Loading took too much time!")
+
     soup = BeautifulSoup(driver.page_source, 'html.parser')  # Parse the page source
     driver.quit()
     return soup
@@ -181,8 +193,8 @@ def main():
         
         recentgamepage_containing_keyword = []
 
-        for url,recentgamepage_instance in recentgamepage_instances:
-            if soup_page_instance_containing_keyword(recentgamepage_instance):
+        for url, recentgamepage_instance in recentgamepage_instances.items():
+            if soup_page_instance_containing_keyword(recentgamepage_instance, keyword):
                 recentgamepage_containing_keyword.append(url)
 
         print(f"Eligible pages found:{recentgamepage_containing_keyword}")
