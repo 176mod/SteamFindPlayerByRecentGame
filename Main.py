@@ -136,20 +136,20 @@ def get_recent_game_page_url(profile_url):
 #     if keyword.lower() in soup.text.lower():
 #         return profile_url  # Return the profile URL if keyword is found
 #     return None  # Return None if not found
-
-def all_urls_on_page(page_url, cookies):
-    try:
-        response = requests.get(page_url, cookies=cookies)  # Make a GET request with the cookie
-        response.raise_for_status()  # Raise an error for bad responses
-        soup_page_instance = BeautifulSoup(response.text, 'html.parser')  # Parse the response HTML
-        all_href_obj = soup_page_instance.find_all('a', href=True)  # Get all href objects
+"""depracated... without selenium the page cannot load correctly to show the game/profile urls"""
+# def all_urls_on_page(page_url, cookies):
+#     try:
+#         response = requests.get(page_url, cookies=cookies)  # Make a GET request with the cookie
+#         response.raise_for_status()  # Raise an error for bad responses
+#         soup_page_instance = BeautifulSoup(response.text, 'html.parser')  # Parse the response HTML
+#         all_href_obj = soup_page_instance.find_all('a', href=True)  # Get all href objects
         
-        # Extract and return the URLs
-        urls = [href_obj['href'] for href_obj in all_href_obj]  # Strip URLs from href attributes
-        return urls
-    except requests.RequestException as e:
-        print(f"An error occurred while fetching the page: {e}")
-        return []  # Return an empty list in case of an error
+#         # Extract and return the URLs
+#         urls = [href_obj['href'] for href_obj in all_href_obj]  # Strip URLs from href attributes
+#         return urls
+#     except requests.RequestException as e:
+#         print(f"An error occurred while fetching the page: {e}")
+#         return []  # Return an empty list in case of an error
 
 def is_profile_url(url)-> bool:
     return url.startswith("https://steamcommunity.com/id/")
@@ -166,9 +166,9 @@ def profile_links_in_urls(urls):
 def profile_links_on_page(soup_page_instance):
     profile_links_on_page = []
     # Collect links that match the profile link class
-    all_href_objs = soup_page_instance.find_all('a', class_='searchPersonaName')
+    profile_href_objs = soup_page_instance.find_all('a', class_='searchPersonaName')
     
-    for href_obj in all_href_objs:
+    for href_obj in profile_href_objs:
         profile_links_on_page.append(href_obj['href'])
         logging.info(f"profile url found: {href_obj['href']}")
         print(f"profile url found: {href_obj['href']}")
@@ -186,6 +186,24 @@ def soup_page_instance_containing_keyword(soup_page_instance, keyword) -> bool:
 def profile_links_on_page_url(url, cookies):
     soup_page_instance = get_page_instance_with_url_selenium(url, cookies)  # Get the BeautifulSoup instance
     return profile_links_on_page(soup_page_instance)  # Extract profile links using the soup instance
+
+def game_links_on_page(soup_page_instance)->list[str]:
+    game_links_on_page = []
+    all_href_objs = soup_page_instance.find_all('a')
+    print(all_href_objs)
+    desired_prefix = "https://store.steampowered.com/app/"
+    game_href_objs = [
+    href_obj for href_obj in all_href_objs 
+    if 'href' in href_obj.attrs and href_obj['href'].startswith(desired_prefix)
+    ]
+    for href_obj in game_href_objs:
+        game_links_on_page.append(href_obj['href'])
+        logging.info(f"game url found: {href_obj['href']}")
+        print(f"game url found: {href_obj['href']}")
+    return game_links_on_page
+
+def gamelink_containing_game_id(game_link,target_id)->bool:
+    return game_link.endswith(str(target_id))
 
 # def main():
 #     keyword = "Helldivers"  # Set the keyword to search for
@@ -207,7 +225,7 @@ def main():
 }
     player_name="404+Not+Found"
     base_url = 'https://steamcommunity.com/search/users/'
-    keyword = "Helldivers"
+    target_id = 394510
     pageNum = 1
     while True:
         profile_urls = profile_links_on_page_url(url_of_page_num(base_url,pageNum,player_name),cookies) # find the urls of profiles
@@ -218,15 +236,15 @@ def main():
                                     for profile_recentgamepage_url in profile_recentgamepage_urls
                                     } # dictionary of recentgame page instances, each url correspond to a page
         
-        recentgamepage_containing_keyword = [] # pages containing target keyword
+        recentgamepage_containing_gameId = [] # pages containing target keyword
 
         for url, recentgamepage_instance in recentgamepage_instances.items():
-            if soup_page_instance_containing_keyword(recentgamepage_instance, keyword):
-                recentgamepage_containing_keyword.append(url)
-                print(f'Eligible pages found:{recentgamepage_containing_keyword}')
-                logging.info(f'Eligible pages found:{recentgamepage_containing_keyword}')
+            for each_game_url in game_links_on_page(recentgamepage_instance):
+                if gamelink_containing_game_id(each_game_url,target_id):
+                    recentgamepage_containing_gameId.append(url)
+                    print(f'Eligible pages found:{recentgamepage_containing_gameId}')
+                    logging.info(f'Eligible pages found:{recentgamepage_containing_gameId}')
         pageNum += 1
-        
 
 if __name__ == "__main__":
     main()  # Call the main function
